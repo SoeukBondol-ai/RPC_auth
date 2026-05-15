@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>RPC Auth</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main class="app">
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">XML-RPC Authentication</p>
+        <h1>RPC Auth</h1>
+      </div>
+      <span class="badge">AES / RSA</span>
+    </header>
+
+    <section class="panel">
+      <form id="rpc-form" class="form">
+        <label>
+          Username
+          <input id="username" name="username" value="alice" autocomplete="username">
+        </label>
+
+        <label>
+          Password
+          <input id="password" name="password" type="password" value="secret123" autocomplete="current-password">
+        </label>
+
+        <div class="split">
+          <label>
+            Encryption
+            <select id="mode" name="mode">
+              <option value="symmetric">AES symmetric</option>
+              <option value="asymmetric">RSA asymmetric</option>
+            </select>
+          </label>
+
+          <label>
+            Method
+            <select id="method" name="method">
+              <option value="getData">getData</option>
+              <option value="writeRecord">writeRecord</option>
+              <option value="deleteItem">deleteItem</option>
+              <option value="ping">ping</option>
+            </select>
+          </label>
+        </div>
+
+        <button id="send" type="submit">Send RPC Call</button>
+      </form>
+
+      <aside class="status">
+        <div class="step active" data-step="client">
+          <strong>Client</strong>
+          <span>Build encrypted credentials</span>
+        </div>
+        <div class="step" data-step="auth">
+          <strong>Auth Service</strong>
+          <span>Validate and issue token</span>
+        </div>
+        <div class="step" data-step="server">
+          <strong>RPC Server</strong>
+          <span>Verify token and run method</span>
+        </div>
+      </aside>
+    </section>
+
+    <section class="output">
+      <div class="summary">
+        <div><span id="calls">0</span><small>Calls</small></div>
+        <div><span id="ok">0</span><small>Success</small></div>
+        <div><span id="fail">0</span><small>Failed</small></div>
+      </div>
+
+      <pre id="log">Ready. Try alice / secret123, bob / pass456, or admin / admin789.</pre>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>

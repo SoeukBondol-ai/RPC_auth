@@ -1,0 +1,9 @@
+[project]
+name = "rpc-auth-project"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "cryptography>=41.0.0",
+]
