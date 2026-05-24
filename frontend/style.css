@@ -59,6 +59,50 @@ h1 {
   background: var(--panel);
 }
 
+/* ── Tabs ──────────────────────────────────────────────────────────────── */
+
+.tabs {
+  display: flex;
+  gap: 2px;
+  margin-bottom: 16px;
+  background: var(--line);
+  border-radius: 8px;
+  padding: 3px;
+}
+
+.tab {
+  flex: 1;
+  height: 40px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  font-weight: 700;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.tab.active {
+  background: var(--panel);
+  color: var(--text);
+  box-shadow: 0 1px 3px rgba(0,0,0,.06);
+}
+
+.tab:hover:not(.active) {
+  background: rgba(255,255,255,.5);
+}
+
+.tab-content {
+  display: none !important;
+}
+
+.tab-content.active {
+  display: grid !important;
+}
+
+/* ── Panel / Card ──────────────────────────────────────────────────────── */
+
 .panel,
 .output {
   background: var(--panel);
@@ -129,6 +173,19 @@ button:disabled {
   opacity: .65;
 }
 
+/* ── Locked message ────────────────────────────────────────────────────── */
+
+.locked-msg {
+  margin: 0;
+  padding: 18px 0;
+  text-align: center;
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+/* ── Status steps ──────────────────────────────────────────────────────── */
+
 .status {
   display: grid;
   gap: 10px;
@@ -164,6 +221,8 @@ button:disabled {
   border-color: var(--danger);
   background: var(--danger-soft);
 }
+
+/* ── Output ────────────────────────────────────────────────────────────── */
 
 .output {
   margin-top: 16px;
@@ -208,6 +267,8 @@ pre {
   font: 13px/1.6 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   white-space: pre-wrap;
 }
+
+/* ── Responsive ────────────────────────────────────────────────────────── */
 
 @media (max-width: 720px) {
   .app {
