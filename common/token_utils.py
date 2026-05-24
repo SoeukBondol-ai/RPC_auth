@@ -1,8 +1,3 @@
-"""
-Simple JWT-like session token utilities.
-Header.Payload.Signature  (all base64-url, signature = HMAC-SHA256)
-"""
-
 import json
 import hmac
 import hashlib
@@ -10,7 +5,7 @@ import base64
 import time
 
 
-SECRET_KEY = "rpc_auth_super_secret_2024"   # In production: load from env / HSM
+SECRET_KEY = "rpc_auth_super_secret_2024"  # In production: load from env / HSM
 
 
 def _b64url_encode(data: dict | str) -> str:
@@ -31,7 +26,7 @@ def _sign(header_enc: str, payload_enc: str) -> str:
 
 def create_token(username: str, method: str, enc_mode: str, ttl: int = 3600) -> str:
     """Issue a signed session token."""
-    header  = {"alg": "HS256" if enc_mode == "symmetric" else "RS256", "typ": "JWT"}
+    header = {"alg": "HS256" if enc_mode == "symmetric" else "RS256", "typ": "JWT"}
     payload = {
         "sub": username,
         "method": method,

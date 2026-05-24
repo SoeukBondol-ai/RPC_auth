@@ -1,18 +1,8 @@
-"""
-RPC Server — XML-RPC server on port 8002
-All methods require a valid session token issued by the Auth Service.
-
-Methods:
-  getData(token)              -> dict
-  writeRecord(token, data)    -> dict
-  deleteItem(token, item_id)  -> dict
-  ping(token)                 -> dict
-"""
-
 import sys
 import time
 import xmlrpc.server
 import xmlrpc.client
+
 sys.path.insert(0, "..")
 
 from common.token_utils import verify_token
@@ -27,13 +17,12 @@ def _require_auth(token: str) -> dict:
 
 
 class RPCServer:
-
     def getData(self, token: str) -> dict:
         payload = _require_auth(token)
         print(f"[RPCServer] getData() called by '{payload['sub']}'")
         return {
             "status": "ok",
-            "user":   payload["sub"],
+            "user": payload["sub"],
             "records": [
                 {"id": 1, "value": "record_alpha"},
                 {"id": 2, "value": "record_beta"},
@@ -43,7 +32,7 @@ class RPCServer:
 
     def writeRecord(self, token: str, data: str) -> dict:
         payload = _require_auth(token)
-        new_id  = int(time.time()) % 100000
+        new_id = int(time.time()) % 100000
         print(f"[RPCServer] writeRecord() by '{payload['sub']}': {data}")
         return {"status": "written", "id": new_id, "data": data}
 
