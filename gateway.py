@@ -1,11 +1,20 @@
 import sys
 import json
+import time
 import xmlrpc.client
-from flask import Flask, request, jsonify, send_from_directory
+from flask import (
+    Flask,
+    request,
+    jsonify,
+    send_from_directory,
+    Response,
+    stream_with_context,
+)
 
 sys.path.insert(0, ".")
 
 import config
+import hotspot
 
 from common.encryption import AESCipher, RSACipher
 
@@ -165,6 +174,84 @@ def reset_password():
         return jsonify({"ok": True, "message": json.loads(result)})
     except xmlrpc.client.Fault as e:
         return jsonify({"ok": False, "error": e.faultString, "code": e.faultCode}), 400
+
+
+# ── WiFi Hotspot ─────────────────────────────────────────────────────────────
+
+
+@app.route("/api/hotspot/start", methods=["POST"])
+def hotspot_start():
+    body = request.get_json(silent=True) or {}
+    result = hotspot.start_hotspot(
+        ssid=body.get("ssid") or None,
+        password=body.get("password") or None,
+        iface=body.get("iface") or None,
+    )
+    if not result.get("ok", True):
+        return jsonify(result), 500
+    return jsonify(result)
+
+
+@app.route("/api/hotspot/stop", methods=["POST"])
+def hotspot_stop():
+    result = hotspot.stop_hotspot()
+    if not result["ok"]:
+        return jsonify(result), 500
+    return jsonify(result)
+
+
+@app.route("/api/hotspot/status")
+def hotspot_status():
+    return jsonify(hotspot.get_hotspot_status())
+
+
+@app.route("/api/hotspot/devices")
+def hotspot_devices():
+    return jsonify(hotspot.get_connected_devices())
+
+
+@app.route("/api/hotspot/qr")
+def hotspot_qr():
+    status = hotspot.get_hotspot_status()
+    if not status.get("active"):
+        return jsonify({"error": "Hotspot not active"}), 400
+    png_bytes = hotspot.generate_wifi_qr(
+        ssid=status["ssid"],
+        password=status["password"],
+    )
+    return Response(png_bytes, mimetype="image/png")
+
+
+@app.route("/api/hotspot/devices/stream")
+def hotspot_devices_stream():
+    """SSE endpoint: pushes connected-device updates every N seconds."""
+
+    def generate():
+        last_json = ""
+        while True:
+            try:
+                devices = hotspot.get_connected_devices()
+                current_json = json.dumps(devices, sort_keys=True)
+            except Exception:
+                devices = []
+                current_json = "[]"
+            if current_json != last_json:
+                last_json = current_json
+                yield f"data: {current_json}\n\n"
+            else:
+                yield ": heartbeat\n\n"
+            time.sleep(config.HOTSPOT_DEVICE_POLL_INTERVAL)
+
+    return Response(
+        stream_with_context(generate()),
+        mimetype="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+@app.route("/api/hotspot/interfaces")
+def hotspot_interfaces():
+    return jsonify(hotspot.get_wifi_interfaces())
 
 
 if __name__ == "__main__":

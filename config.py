@@ -39,3 +39,20 @@ def get_seed_users() -> list[tuple[str, str]]:
             user, pwd = entry.split(":", 1)
             pairs.append((user.strip(), pwd.strip()))
     return pairs
+
+
+# ── WiFi Hotspot ──────────────────────────────────────────────────────────────
+HOTSPOT_SSID = os.environ.get("RPC_AUTH_HOTSPOT_SSID", "RPC-Auth-Hotspot")
+HOTSPOT_PASSWORD = os.environ.get("RPC_AUTH_HOTSPOT_PASSWORD", "rpcauth2024")
+HOTSPOT_IFACE = os.environ.get("RPC_AUTH_HOTSPOT_IFACE", "")
+HOTSPOT_CON_NAME = os.environ.get("RPC_AUTH_HOTSPOT_CON_NAME", "rpc_auth_hotspot")
+HOTSPOT_USE_SUDO = os.environ.get("RPC_AUTH_HOTSPOT_USE_SUDO", "true").lower() in (
+    "true",
+    "1",
+    "yes",
+)
+HOTSPOT_BAND = os.environ.get("RPC_AUTH_HOTSPOT_BAND", "bg")
+HOTSPOT_CHANNEL = int(os.environ.get("RPC_AUTH_HOTSPOT_CHANNEL", "0")) or None
+HOTSPOT_DEVICE_POLL_INTERVAL = int(
+    os.environ.get("RPC_AUTH_HOTSPOT_POLL_INTERVAL", "3")
+)

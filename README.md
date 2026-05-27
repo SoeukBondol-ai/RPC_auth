@@ -1,6 +1,6 @@
 # RPC Authentication System — Python
 
-A complete RPC system with authentication, built with Python's `xmlrpc` module, `cryptography`, `SQLAlchemy`, and `Flask`. Demonstrates both symmetric (AES-256) and asymmetric (RSA-2048) encryption for credential transport, with a real database and web frontend.
+A complete RPC system with authentication, built with Python's `xmlrpc` module, `cryptography`, `SQLAlchemy`, and `Flask`. Demonstrates both symmetric (AES-256) and asymmetric (RSA-2048) encryption for credential transport, with a real database and web frontend. Also includes a **WiFi Hotspot** feature that shares the laptop's internet connection to other devices, with a connected-devices dashboard and QR code.
 
 ## Architecture
 
@@ -24,7 +24,13 @@ A complete RPC system with authentication, built with Python's `xmlrpc` module, 
 │           │  /api/login     │  (port 8000)  │                │  + RPC Server  │
 │           │  /api/register  │   Flask       │                └───────────────┘
 │           │  /api/rpc       └──────────────┘
-└──────────┘
+│           │  /api/hotspot/*       │
+└──────────┘                   │ nmcli
+                               ▼
+                        ┌──────────────┐
+                        │  WiFi Hotspot │
+                        │  (nmcli)      │
+                        └──────────────┘
 ```
 
 ### Service Breakdown
@@ -33,7 +39,7 @@ A complete RPC system with authentication, built with Python's `xmlrpc` module, 
 |---|---|---|
 | **Auth Service** | 8001 | XML-RPC server — register, login, password reset (AES/RSA encrypted) |
 | **RPC Server** | 8002 | XML-RPC server — data methods gated by session token |
-| **Gateway** | 8000 | Flask REST API — translates browser JSON calls to XML-RPC, serves frontend |
+| **Gateway** | 8000 | Flask REST API — translates browser JSON calls to XML-RPC, serves frontend, manages WiFi hotspot |
 
 ### Data Flow
 
@@ -41,6 +47,7 @@ A complete RPC system with authentication, built with Python's `xmlrpc` module, 
 2. **Login** — Client encrypts `{username, password, method}` → Auth Service decrypts → verifies password hash → issues JWT-like token (HMAC-SHA256 signed, 1-hour TTL)
 3. **RPC Call** — Client sends token to RPC Server → server verifies token signature + expiry → executes method → returns result
 4. **Password Reset** — Client encrypts `{username, new_password}` → Auth Service decrypts → updates password hash in SQLite
+5. **WiFi Hotspot** — Gateway calls `nmcli` to create a WiFi access point → shares internet → shows QR code → dashboard lists connected devices in real time
 
 ## Project Structure
 
@@ -51,7 +58,7 @@ rpc_auth_project/
 │   └── token_utils.py      # JWT-like session token (HMAC-SHA256)
 ├── auth_service/
 │   ├── __init__.py
-│   ├── db.py               # SQLAlchemy models + helpers (User table, password hashing)
+│   ├── db.py               # SQLAlchemy models + helpers (User table, Argon2id hashing)
 │   └── auth_service.py     # XML-RPC server on port 8001
 ├── server/
 │   ├── __init__.py
@@ -60,10 +67,11 @@ rpc_auth_project/
 │   ├── __init__.py
 │   └── client.py           # Command-line RPC client
 ├── frontend/
-│   ├── index.html           # Browser UI (Register / Login / Reset / RPC)
+│   ├── index.html           # Browser UI (Register / Login / Reset / RPC / Hotspot)
 │   ├── app.js               # Frontend logic (fetch calls to Gateway)
 │   └── style.css            # Styles
 ├── config.py                # Environment-based configuration
+├── hotspot.py               # WiFi hotspot management (Linux/Windows)
 ├── gateway.py               # Flask REST gateway on port 8000
 ├── run.py                   # Start all 3 services in one terminal
 ├── seed.py                  # Create default test users
@@ -82,6 +90,8 @@ rpc_auth_project/
 | Asymmetric Encryption | RSA-2048 with OAEP+SHA256 |
 | Token Signing | HMAC-SHA256 (JWT-like format) |
 | Password Hashing | Argon2id (via `argon2-cffi`) |
+| WiFi Hotspot | `nmcli` (Linux) / `netsh wlan` (Windows) |
+| QR Code | `qrcode[pil]` (WiFi standard format) |
 | Database | SQLite via SQLAlchemy 2.0 |
 | Web Frontend | Vanilla JS + CSS, served by Flask |
 | REST Gateway | Flask |
@@ -107,6 +117,14 @@ cp .env.example .env
 | `RPC_AUTH_GATEWAY_HOST` | `localhost` | Gateway hostname |
 | `RPC_AUTH_GATEWAY_PORT` | `8000` | Gateway port |
 | `RPC_AUTH_SEED_USERS` | `alice:secret123,bob:pass456,admin:admin789` | Comma-separated `user:password` pairs for seeding |
+| `RPC_AUTH_HOTSPOT_SSID` | `RPC-Auth-Hotspot` | WiFi hotspot network name |
+| `RPC_AUTH_HOTSPOT_PASSWORD` | `rpcauth2024` | WiFi hotspot password (min 8 chars) |
+| `RPC_AUTH_HOTSPOT_IFACE` | *(auto-detect)* | WiFi interface name |
+| `RPC_AUTH_HOTSPOT_CON_NAME` | `rpc_auth_hotspot` | NetworkManager connection name |
+| `RPC_AUTH_HOTSPOT_USE_SUDO` | `true` | Try sudo if direct nmcli fails (Linux only) |
+| `RPC_AUTH_HOTSPOT_BAND` | `bg` | WiFi band (`bg` = 2.4 GHz, `a` = 5 GHz) |
+| `RPC_AUTH_HOTSPOT_CHANNEL` | `0` | WiFi channel (0 = auto) |
+| `RPC_AUTH_HOTSPOT_POLL_INTERVAL` | `3` | Seconds between device list polls |
 
 Generate production-safe secrets:
 
@@ -169,6 +187,49 @@ uv run python client/client.py --user bob --password pass456 --method ping --enc
 # Wrong password (expect rejection)
 uv run python client/client.py --user alice --password wrong --method getData --enc symmetric
 ```
+
+## WiFi Hotspot
+
+The project can create a WiFi access point that shares the laptop's internet connection with other devices. Works on **Linux** (via NetworkManager/nmcli) and **Windows** (via netsh wlan). This is managed through the **Hotspot** tab in the web dashboard.
+
+### Prerequisites
+
+**Linux:**
+- **NetworkManager** must be running (standard on most distros)
+- Your WiFi adapter must support AP mode (check with `iw list | grep "AP"`)
+- `nmcli` commands need elevated privileges — the app tries without sudo first, then retries with `sudo -n` if needed. Options:
+  - Run the gateway as root: `sudo uv run python gateway.py`
+  - Set up passwordless sudo for nmcli:
+    ```bash
+    echo '$(whoami) ALL=(root) NOPASSWD: /usr/bin/nmcli' | sudo tee /etc/sudoers.d/rpc-auth-nmcli
+    ```
+  - Set `RPC_AUTH_HOTSPOT_USE_SUDO=false` in `.env` if running as root
+
+**Windows:**
+- Run the gateway as Administrator (required for `netsh wlan`)
+- The hosted network feature must be supported by your WiFi driver
+
+### Hotspot Dashboard
+
+The **Hotspot** tab provides:
+
+- **Start/Stop** controls for the WiFi hotspot
+- **SSID & Password** configuration (uses env defaults if left empty)
+- **WiFi interface** auto-detection or manual selection
+- **QR code** for mobile devices to scan and connect instantly
+- **Connected devices table** that updates in real time, showing IP address, MAC address, and hostname of each connected device
+
+### Hotspot API Endpoints
+
+| Endpoint | Method | Description |
+|---|---|---|
+| `/api/hotspot/start` | POST | Start the hotspot (optional body: `{ssid?, password?, iface?}`) |
+| `/api/hotspot/stop` | POST | Stop the hotspot |
+| `/api/hotspot/status` | GET | Current hotspot status (active, ssid, password, iface, ip) |
+| `/api/hotspot/devices` | GET | List of connected devices (one-shot JSON) |
+| `/api/hotspot/devices/stream` | GET | SSE stream — pushes device list changes in real time |
+| `/api/hotspot/qr` | GET | PNG QR code image for the active hotspot |
+| `/api/hotspot/interfaces` | GET | Available WiFi interfaces |
 
 ## Encryption Modes
 
