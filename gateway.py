@@ -5,20 +5,19 @@ from flask import Flask, request, jsonify, send_from_directory
 
 sys.path.insert(0, ".")
 
-from common.encryption import AESCipher, RSACipher
+import config
 
-AUTH_URL = "http://localhost:8001"
-SERVER_URL = "http://localhost:8002"
+from common.encryption import AESCipher, RSACipher
 
 app = Flask(__name__, static_folder="frontend", static_url_path="")
 
 
 def _get_auth_proxy():
-    return xmlrpc.client.ServerProxy(AUTH_URL)
+    return xmlrpc.client.ServerProxy(config.AUTH_URL)
 
 
 def _get_server_proxy():
-    return xmlrpc.client.ServerProxy(SERVER_URL)
+    return xmlrpc.client.ServerProxy(config.SERVER_URL)
 
 
 @app.route("/")
@@ -169,5 +168,5 @@ def reset_password():
 
 
 if __name__ == "__main__":
-    print("[Gateway] Starting on http://localhost:8000")
-    app.run(host="localhost", port=8000, debug=False)
+    print(f"[Gateway] Starting on http://{config.GATEWAY_HOST}:{config.GATEWAY_PORT}")
+    app.run(host=config.GATEWAY_HOST, port=config.GATEWAY_PORT, debug=False)

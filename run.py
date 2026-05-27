@@ -10,6 +10,7 @@ import xmlrpc.server
 
 sys.path.insert(0, ".")
 
+import config
 from auth_service import db
 from auth_service.auth_service import AuthService
 from server.rpc_server import RPCServer
@@ -29,12 +30,12 @@ if __name__ == "__main__":
     threads = [
         threading.Thread(
             target=start_xmlrpc,
-            args=(AuthService(), "localhost", 8001, "AuthService"),
+            args=(AuthService(), config.AUTH_HOST, config.AUTH_PORT, "AuthService"),
             daemon=True,
         ),
         threading.Thread(
             target=start_xmlrpc,
-            args=(RPCServer(), "localhost", 8002, "RPCServer"),
+            args=(RPCServer(), config.RPC_HOST, config.RPC_PORT, "RPCServer"),
             daemon=True,
         ),
     ]
@@ -42,14 +43,16 @@ if __name__ == "__main__":
     for t in threads:
         t.start()
 
-    print("[Auth Service]  http://localhost:8001")
-    print("[RPC Server]    http://localhost:8002")
+    print(f"[Auth Service]  http://{config.AUTH_HOST}:{config.AUTH_PORT}")
+    print(f"[RPC Server]    http://{config.RPC_HOST}:{config.RPC_PORT}")
 
     from gateway import app
 
-    print("[Gateway]       http://localhost:8000")
-    print("\nOpen http://localhost:8000 in your browser.\n")
+    print(f"[Gateway]       http://{config.GATEWAY_HOST}:{config.GATEWAY_PORT}")
+    print(
+        f"\nOpen http://{config.GATEWAY_HOST}:{config.GATEWAY_PORT} in your browser.\n"
+    )
     try:
-        app.run(host="localhost", port=8000, debug=False)
+        app.run(host=config.GATEWAY_HOST, port=config.GATEWAY_PORT, debug=False)
     except KeyboardInterrupt:
         print("\nShutting down.")

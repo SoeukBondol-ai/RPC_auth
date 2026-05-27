@@ -7,6 +7,7 @@ import xmlrpc.client
 
 sys.path.insert(0, ".")
 
+import config
 from auth_service import db
 from common.encryption import AESCipher, RSACipher
 
@@ -27,8 +28,8 @@ def start_server(instance, host, port, name):
 
 
 def demo():
-    AUTH_URL = "http://localhost:8001"
-    SERVER_URL = "http://localhost:8002"
+    AUTH_URL = config.AUTH_URL
+    SERVER_URL = config.SERVER_URL
 
     print("\n" + "=" * 60)
     print("  RPC + Authentication Demo  (Python XML-RPC)")
@@ -198,12 +199,12 @@ if __name__ == "__main__":
 
     t1 = threading.Thread(
         target=start_server,
-        args=(AuthService(), "localhost", 8001, "AuthService"),
+        args=(AuthService(), config.AUTH_HOST, config.AUTH_PORT, "AuthService"),
         daemon=True,
     )
     t2 = threading.Thread(
         target=start_server,
-        args=(RPCServer(), "localhost", 8002, "RPCServer"),
+        args=(RPCServer(), config.RPC_HOST, config.RPC_PORT, "RPCServer"),
         daemon=True,
     )
     t1.start()

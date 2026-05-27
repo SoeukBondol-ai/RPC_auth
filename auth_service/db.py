@@ -1,11 +1,14 @@
 from datetime import datetime, timezone
 
+from argon2 import PasswordHasher
 from sqlalchemy import Column, DateTime, Integer, String, create_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
-from werkzeug.security import check_password_hash, generate_password_hash
 
-DB_PATH = "users.db"
-engine = create_engine(f"sqlite:///{DB_PATH}", echo=False)
+import config
+
+ph = PasswordHasher()
+
+engine = create_engine(f"sqlite:///{config.DB_PATH}", echo=False)
 SessionLocal = sessionmaker(bind=engine)
 
 Base = declarative_base()
@@ -25,14 +28,8 @@ def init_db():
     Base.metadata.create_all(engine)
     with SessionLocal() as session:
         if session.query(User).first() is None:
-            for name, pwd in [
-                ("alice", "secret123"),
-                ("bob", "pass456"),
-                ("admin", "admin789"),
-            ]:
-                session.add(
-                    User(username=name, password_hash=generate_password_hash(pwd))
-                )
+            for name, pwd in config.get_seed_users():
+                session.add(User(username=name, password_hash=ph.hash(pwd)))
             session.commit()
 
 
@@ -43,7 +40,7 @@ def get_user(username: str) -> User | None:
 
 def create_user(username: str, password: str) -> User:
     with SessionLocal() as session:
-        user = User(username=username, password_hash=generate_password_hash(password))
+        user = User(username=username, password_hash=ph.hash(password))
         session.add(user)
         session.commit()
         session.refresh(user)
@@ -55,7 +52,14 @@ def verify_password(username: str, password: str) -> bool:
         user = session.query(User).filter_by(username=username).first()
         if user is None:
             return False
-        return check_password_hash(user.password_hash, password)
+        try:
+            ph.verify(user.password_hash, password)
+            if ph.check_needs_rehash(user.password_hash):
+                user.password_hash = ph.hash(password)
+                session.commit()
+            return True
+        except Exception:
+            return False
 
 
 def reset_password(username: str, new_password: str) -> bool:
@@ -63,7 +67,7 @@ def reset_password(username: str, new_password: str) -> bool:
         user = session.query(User).filter_by(username=username).first()
         if user is None:
             return False
-        user.password_hash = generate_password_hash(new_password)
+        user.password_hash = ph.hash(new_password)
         session.commit()
         return True
 

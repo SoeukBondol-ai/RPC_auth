@@ -4,13 +4,13 @@ import xmlrpc.server
 
 sys.path.insert(0, "..")
 
+import config
+
 from auth_service import db
 from common.encryption import AESCipher, RSACipher
 from common.token_utils import create_token
 
-# ── Pre-shared AES key (hex) – in real life distribute via secure channel ──
-_SHARED_KEY_HEX = "fb28d431bde358571a1dcb7a364f0428f5fc57574f2f51e4fe2181d9044be439"
-_SHARED_KEY = AESCipher.key_from_hex(_SHARED_KEY_HEX)
+_SHARED_KEY = AESCipher.key_from_hex(config.SHARED_KEY_HEX)
 
 # ── RSA keypair owned by auth service ──
 _PRIVATE_KEY, _PUBLIC_KEY = RSACipher.generate_keypair()
@@ -149,21 +149,21 @@ class AuthService:
         return _PUBLIC_KEY_PEM
 
     def get_shared_key_hex(self) -> str:
-        return _SHARED_KEY_HEX
+        return config.SHARED_KEY_HEX
 
 
 if __name__ == "__main__":
     import xmlrpc.client  # noqa – needed for Fault
 
     db.init_db()
-    HOST, PORT = "localhost", 8001
+    HOST, PORT = config.AUTH_HOST, config.AUTH_PORT
     server = xmlrpc.server.SimpleXMLRPCServer(
         (HOST, PORT), logRequests=False, allow_none=True
     )
     server.register_instance(AuthService())
     server.register_introspection_functions()
     print(f"[AuthService] Listening on {HOST}:{PORT} ...")
-    print(f"[AuthService] Shared AES key: {_SHARED_KEY_HEX}")
+    print(f"[AuthService] Shared AES key: {config.SHARED_KEY_HEX}")
     print(f"[AuthService] RSA public key:\n{_PUBLIC_KEY_PEM}")
     try:
         server.serve_forever()
