@@ -42,13 +42,29 @@ function showLoggedIn() {
 }
 
 // ── Tabs ───────────────────────────────────────────────────────────────────
+const outputSection = document.querySelector(".output");
+
+function switchTab(tabName) {
+  document.querySelectorAll(".tab").forEach((t) => t.classList.remove("active"));
+  document.querySelectorAll(".tab-content").forEach((c) => c.classList.remove("active"));
+  document.querySelector(`[data-tab="${tabName}"]`).classList.add("active");
+  document.querySelector(`#tab-${tabName}`).classList.add("active");
+
+  // Show output section only on non-hotspot tabs
+  const isHotspot = tabName === "hotspot";
+  outputSection.style.display = isHotspot ? "none" : "";
+
+  // Show devices panel only on hotspot tab when hotspot is active
+  const devicesPanel = document.querySelector("#devices-panel");
+  if (isHotspot && devicesPanel.dataset.hotspotActive === "true") {
+    devicesPanel.classList.add("active");
+  } else {
+    devicesPanel.classList.remove("active");
+  }
+}
+
 document.querySelectorAll(".tab").forEach((tab) => {
-  tab.addEventListener("click", () => {
-    document.querySelectorAll(".tab").forEach((t) => t.classList.remove("active"));
-    document.querySelectorAll(".tab-content").forEach((c) => c.classList.remove("active"));
-    tab.classList.add("active");
-    document.querySelector(`#tab-${tab.dataset.tab}`).classList.add("active");
-  });
+  tab.addEventListener("click", () => switchTab(tab.dataset.tab));
 });
 
 // ── RPC method toggle (data vs item_id) ────────────────────────────────────
@@ -276,7 +292,14 @@ function updateHotspotUI(status) {
     : "";
   hotspotStartBtn.disabled = active;
   hotspotStopBtn.disabled  = !active;
-  devicesPanel.style.display = active ? "" : "none";
+  devicesPanel.dataset.hotspotActive = active ? "true" : "false";
+  // Only show devices panel if hotspot tab is active AND hotspot is running
+  const hotspotTabActive = document.querySelector('[data-tab="hotspot"]').classList.contains("active");
+  if (hotspotTabActive && active) {
+    devicesPanel.classList.add("active");
+  } else {
+    devicesPanel.classList.remove("active");
+  }
   qrContainer.style.display  = active ? "" : "none";
 
   // Show warnings if any
@@ -415,7 +438,7 @@ function renderDevices(devices) {
     "<tr>" +
       "<td>" + (d.ip || "—") + "</td>" +
       "<td><code>" + (d.mac || "—") + "</code></td>" +
-      "<td>" + (d.hostname || "—") + "</td>" +
+      "<td" + (!d.hostname ? ' title="Device does not share its hostname (common on iOS)"' : '') + ">" + (d.hostname || "—") + "</td>" +
     "</tr>"
   ).join("");
 }

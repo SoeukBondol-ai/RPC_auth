@@ -355,6 +355,7 @@ pre {
 .devices-panel {
   margin-top: 16px;
   padding: 20px;
+  grid-template-columns: 1fr;
 }
 
 .devices-table {

@@ -1,5 +1,6 @@
-"""WiFi hotspot management — cross-platform (Linux via nmcli, Windows via netsh)."""
+"""WiFi hotspot management — cross-platform (Linux via nmcli, Windows via WinRT Mobile Hotspot)."""
 
+import json
 import os
 import platform
 import re
@@ -316,7 +317,47 @@ def _interfaces_linux() -> list[str]:
     return interfaces
 
 
-# ── Windows (netsh) ────────────────────────────────────────────────────────────
+# ── Windows (WinRT Mobile Hotspot via PowerShell) ──────────────────────────────
+
+_PS_WINRT_PROLOGUE = """
+[Windows.Networking.NetworkOperators.NetworkOperatorTetheringManager, Windows.Networking.NetworkOperators, ContentType=WindowsRuntime] | Out-Null
+[Windows.Networking.Connectivity.NetworkInformation, Windows.Networking.Connectivity, ContentType=WindowsRuntime] | Out-Null
+$ErrorActionPreference = "Stop"
+$profile = [Windows.Networking.Connectivity.NetworkInformation]::GetInternetConnectionProfile()
+if ($null -eq $profile) { throw "No active internet connection profile found" }
+$manager = [Windows.Networking.NetworkOperators.NetworkOperatorTetheringManager]::CreateFromConnectionProfile($profile)
+""".strip()
+
+_PS_TETHERING_POLL = """
+$count = 0
+while ($manager.TetheringOperationalState -ne '__TARGET__' -and $count -lt 30) {
+    Start-Sleep -Milliseconds 500
+    $count++
+}
+if ($manager.TetheringOperationalState -ne '__TARGET__') {
+    throw "Hotspot did not reach state '__TARGET__' within 15 seconds"
+}
+""".strip()
+
+
+def _run_ps(script: str, check: bool = True) -> subprocess.CompletedProcess:
+    """Run a PowerShell script and return the result."""
+    result = subprocess.run(
+        ["powershell", "-NoProfile", "-NonInteractive", "-Command", script],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if check and result.returncode != 0:
+        stderr = result.stderr.strip()
+        if "access is denied" in stderr.lower() or "elevation" in stderr.lower():
+            raise RuntimeError(
+                "Mobile Hotspot requires Administrator privileges.\n"
+                "Run the gateway as Administrator:\n"
+                "  Right-click terminal → Run as Administrator → python gateway.py"
+            )
+        raise RuntimeError(stderr or f"PowerShell command failed (exit code {result.returncode})")
+    return result
 
 
 def _start_windows(
@@ -328,99 +369,150 @@ def _start_windows(
     ssid = ssid or config.HOTSPOT_SSID
     password = password or config.HOTSPOT_PASSWORD
 
+    script = _PS_WINRT_PROLOGUE + f"""
+$config = $manager.GetCurrentAccessPointConfiguration()
+$config.Ssid = "{ssid}"
+$config.Passphrase = "{password}"
+$manager.ConfigureAccessPointAsync($config) | Out-Null
+$manager.StartTetheringAsync() | Out-Null
+""" + _PS_TETHERING_POLL.replace("__TARGET__", "On")
     try:
-        _run(
-            [
-                "netsh",
-                "wlan",
-                "set",
-                "hostednetwork",
-                f"ssid={ssid}",
-                f"key={password}",
-                "mode=allow",
-            ]
-        )
-        _run(["netsh", "wlan", "start", "hostednetwork"])
+        _run_ps(script)
     except RuntimeError as e:
         return {"ok": False, "error": str(e)}
 
-    time.sleep(2)
     return _status_windows()
 
 
 def _stop_windows(**kwargs) -> dict:
+    script = _PS_WINRT_PROLOGUE + """
+$manager.StopTetheringAsync() | Out-Null
+""" + _PS_TETHERING_POLL.replace("__TARGET__", "Off")
     try:
-        _run(["netsh", "wlan", "stop", "hostednetwork"])
+        _run_ps(script)
         return {"ok": True}
     except RuntimeError as e:
         return {"ok": False, "error": str(e)}
 
 
 def _status_windows(**kwargs) -> dict:
-    result = _run(["netsh", "wlan", "show", "hostednetwork"], check=False)
-    output = result.stdout
+    script = _PS_WINRT_PROLOGUE + """
+$config = $manager.GetCurrentAccessPointConfiguration()
+@{
+    active = ($manager.TetheringOperationalState -eq "On")
+    ssid = $config.Ssid
+    password = $config.Passphrase
+} | ConvertTo-Json -Compress
+"""
+    result = _run_ps(script, check=False)
 
-    if "Not started" in output or result.returncode != 0:
+    if result.returncode != 0:
         return {
             "ok": True,
             "active": False,
-            "con_name": "hostednetwork",
+            "con_name": "mobile_hotspot",
             "platform": "windows",
         }
 
-    ssid = ""
-    status_line = ""
-    for line in output.splitlines():
-        line = line.strip()
-        if "SSID name" in line:
-            ssid = line.split(":", 1)[-1].strip().strip('"')
-        if "Status" in line:
-            status_line = line.split(":", 1)[-1].strip()
+    try:
+        data = json.loads(result.stdout.strip())
+    except (json.JSONDecodeError, ValueError):
+        return {
+            "ok": True,
+            "active": False,
+            "con_name": "mobile_hotspot",
+            "platform": "windows",
+        }
 
-    # Get IP of the hosted network adapter
+    # Get IP of the Wi-Fi Direct (tethering) adapter
     ip_address = ""
-    for adapter_name in ["Local Area Connection*", "Wi-Fi"]:
-        ip_r = _run(
-            ["netsh", "interface", "ipv4", "show", "addr", f"name={adapter_name}"],
-            check=False,
-        )
-        if ip_r.returncode == 0:
-            match = re.search(r"(\d+\.\d+\.\d+\.\d+)", ip_r.stdout)
-            if match:
-                ip_address = match.group(1)
-                break
+    ip_r = _run_ps(
+        "Get-NetAdapter | Where-Object { $_.InterfaceDescription -like '*Wi-Fi Direct*' } "
+        "| Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue "
+        "| Select-Object -First 1 -ExpandProperty IPAddress",
+        check=False,
+    )
+    if ip_r.returncode == 0 and ip_r.stdout.strip():
+        ip_address = ip_r.stdout.strip()
 
     return {
         "ok": True,
-        "active": status_line.lower() == "started",
-        "ssid": ssid,
-        "password": config.HOTSPOT_PASSWORD,
-        "iface": "Microsoft Hosted Network Virtual Adapter",
-        "con_name": "hostednetwork",
+        "active": data.get("active", False),
+        "ssid": data.get("ssid", ""),
+        "password": data.get("password", config.HOTSPOT_PASSWORD),
+        "iface": "Microsoft Wi-Fi Direct Virtual Adapter",
+        "con_name": "mobile_hotspot",
         "ip_address": ip_address,
         "platform": "windows",
     }
 
 
-def _devices_windows(**kwargs) -> list[dict]:
-    """On Windows, get connected devices from ARP table."""
-    devices: dict[str, dict] = {}
-    result = _run(["arp", "-a"], check=False)
-    if result.returncode == 0:
-        for line in result.stdout.splitlines():
-            mac_match = re.search(
-                r"([0-9a-fA-F]{2}[:-][0-9a-fA-F]{2}[:-][0-9a-fA-F]{2}[:-][0-9a-fA-F]{2}[:-][0-9a-fA-F]{2}[:-][0-9a-fA-F]{2})",
-                line,
-            )
-            ip_match = re.match(r"\s*(\d+\.\d+\.\d+\.\d+)", line)
-            if mac_match and ip_match:
-                ip = ip_match.group(1)
-                mac = mac_match.group(1).upper().replace("-", ":")
-                if mac != "FF:FF:FF:FF:FF:FF" and not ip.startswith("224."):
-                    key = mac.replace(":", "")
-                    devices[key] = {"ip": ip, "mac": mac, "hostname": ""}
+def _hotspot_adapter_index() -> int | None:
+    """Find the interface index of the Wi-Fi Direct (hotspot) adapter."""
+    result = _run_ps(
+        "Get-NetAdapter | Where-Object { $_.InterfaceDescription -like '*Wi-Fi Direct*' } "
+        "| Select-Object -First 1 -ExpandProperty InterfaceIndex",
+        check=False,
+    )
+    if result.returncode == 0 and result.stdout.strip().isdigit():
+        return int(result.stdout.strip())
+    return None
 
-    return list(devices.values())
+
+def _devices_windows(**kwargs) -> list[dict]:
+    """On Windows, get devices connected to the Mobile Hotspot only."""
+    iface_idx = _hotspot_adapter_index()
+    if iface_idx is None:
+        return []
+
+    # Query neighbor table on the hotspot adapter (fast, no DNS resolution)
+    ps_script = """
+$neighbors = Get-NetNeighbor -InterfaceIndex """ + str(iface_idx) + """
+$result = @()
+foreach ($n in $neighbors) {
+    $result += @{
+        ip = $n.IPAddress
+        mac = ($n.LinkLayerAddress -replace '-',':').ToUpper()
+    }
+}
+$result | ConvertTo-Json -Compress
+"""
+    result = _run_ps(ps_script, check=False)
+    if result.returncode != 0 or not result.stdout.strip():
+        return []
+
+    try:
+        data = json.loads(result.stdout.strip())
+        if isinstance(data, dict):
+            data = [data]
+    except (json.JSONDecodeError, ValueError):
+        return []
+
+    # Filter out broadcast, multicast, and zero-MAC entries, then resolve hostnames in Python
+    import socket
+    filtered = []
+    for d in data:
+        ip = d.get("ip", "")
+        mac = d.get("mac", "")
+        if mac == "00:00:00:00:00:00" or mac.startswith("FF:FF"):
+            continue
+        if ip.startswith(("224.", "239.", "255.")):
+            continue
+        if ip.endswith(".255"):
+            continue
+        hostname = ""
+        try:
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor() as exc:
+                fut = exc.submit(socket.gethostbyaddr, ip)
+                hostname = fut.result(timeout=2)[0]
+            if hostname.endswith(".mshome.net"):
+                hostname = hostname[: -len(".mshome.net")]
+        except Exception:
+            pass
+        d["hostname"] = hostname
+        filtered.append(d)
+    return filtered
 
 
 def _interfaces_windows() -> list[str]:
