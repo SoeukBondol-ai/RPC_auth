@@ -250,3 +250,179 @@ document.querySelector("#rpc-form").addEventListener("submit", async (e) => {
     writeLog([`Client: calling ${method}()`, `Error: ${err.message}`]);
   }
 });
+
+// ── Hotspot ──────────────────────────────────────────────────────────────────
+const hotspotStartBtn    = document.querySelector("#hotspot-start-btn");
+const hotspotStopBtn    = document.querySelector("#hotspot-stop-btn");
+const hotspotSsid       = document.querySelector("#hotspot-ssid");
+const hotspotPassword   = document.querySelector("#hotspot-password");
+const hotspotIface      = document.querySelector("#hotspot-iface");
+const hotspotDot        = document.querySelector("#hotspot-dot");
+const hotspotStatusText = document.querySelector("#hotspot-status-text");
+const hotspotStatusDetail = document.querySelector("#hotspot-status-detail");
+const qrContainer       = document.querySelector("#qr-container");
+const qrImage            = document.querySelector("#qr-image");
+const devicesPanel       = document.querySelector("#devices-panel");
+const devicesTbody      = document.querySelector("#devices-tbody");
+const hotspotWarning    = document.querySelector("#hotspot-warning");
+let hotspotEventSource   = null;
+
+function updateHotspotUI(status) {
+  const active = status.active === true;
+  hotspotDot.className = "status-dot " + (active ? "dot-on" : "dot-off");
+  hotspotStatusText.textContent = active ? "Hotspot On" : "Hotspot Off";
+  hotspotStatusDetail.textContent = active
+    ? "SSID: " + status.ssid + " | Interface: " + status.iface + " | IP: " + status.ip_address
+    : "";
+  hotspotStartBtn.disabled = active;
+  hotspotStopBtn.disabled  = !active;
+  devicesPanel.style.display = active ? "" : "none";
+  qrContainer.style.display  = active ? "" : "none";
+
+  // Show warnings if any
+  if (status.warnings && status.warnings.length > 0) {
+    hotspotWarning.textContent = status.warnings.join(" ");
+    hotspotWarning.style.display = "";
+  } else {
+    hotspotWarning.style.display = "none";
+  }
+
+  if (active) {
+    qrImage.src = "/api/hotspot/qr?t=" + Date.now();
+  }
+}
+
+async function fetchHotspotStatus() {
+  try {
+    const res  = await fetch("/api/hotspot/status");
+    const data = await res.json();
+    updateHotspotUI(data);
+  } catch (_) {
+    hotspotStatusText.textContent = "Error checking status";
+  }
+}
+
+async function fetchInterfaces() {
+  try {
+    const res    = await fetch("/api/hotspot/interfaces");
+    const ifaces = await res.json();
+    hotspotIface.innerHTML = '<option value="">Auto-detect</option>';
+    ifaces.forEach((i) => {
+      const opt = document.createElement("option");
+      opt.value = i;
+      opt.textContent = i;
+      hotspotIface.appendChild(opt);
+    });
+  } catch (_) { /* ignore */ }
+}
+
+hotspotStartBtn.addEventListener("click", async () => {
+  bump("calls");
+  clearSteps("hs");
+  setStep("hs", "hs-start", "active");
+  writeLog(["Starting WiFi hotspot..."]);
+  hotspotStartBtn.disabled = true;
+
+  const body = {};
+  if (hotspotSsid.value.trim())     body.ssid     = hotspotSsid.value.trim();
+  if (hotspotPassword.value.trim()) body.password = hotspotPassword.value.trim();
+  if (hotspotIface.value)           body.iface    = hotspotIface.value;
+
+  try {
+    const res  = await fetch("/api/hotspot/start", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json();
+    if (data.ok || data.active) {
+      bump("ok");
+      setStep("hs", "hs-start", "active");
+      updateHotspotUI(data);
+      startDeviceStream();
+      writeLog([
+        "Hotspot started",
+        "SSID: " + data.ssid,
+        "Password: " + (data.password || "(from config)"),
+        "Interface: " + data.iface,
+      ]);
+    } else {
+      bump("fail");
+      setStep("hs", "hs-start", "error");
+      writeLog(["Failed to start hotspot", data.error || "Unknown error"]);
+      hotspotStartBtn.disabled = false;
+    }
+  } catch (err) {
+    bump("fail");
+    setStep("hs", "hs-start", "error");
+    writeLog(["Error starting hotspot", err.message]);
+    hotspotStartBtn.disabled = false;
+  }
+});
+
+hotspotStopBtn.addEventListener("click", async () => {
+  bump("calls");
+  writeLog(["Stopping WiFi hotspot..."]);
+  hotspotStopBtn.disabled = true;
+
+  try {
+    const res  = await fetch("/api/hotspot/stop", { method: "POST" });
+    const data = await res.json();
+    if (data.ok) {
+      bump("ok");
+      stopDeviceStream();
+      updateHotspotUI({ active: false });
+      writeLog(["Hotspot stopped"]);
+    } else {
+      bump("fail");
+      writeLog(["Failed to stop hotspot", data.error || "Unknown error"]);
+      hotspotStopBtn.disabled = false;
+    }
+  } catch (err) {
+    bump("fail");
+    writeLog(["Error stopping hotspot", err.message]);
+    hotspotStopBtn.disabled = false;
+  }
+});
+
+function startDeviceStream() {
+  if (hotspotEventSource) hotspotEventSource.close();
+  hotspotEventSource = new EventSource("/api/hotspot/devices/stream");
+  hotspotEventSource.onmessage = (event) => {
+    const devices = JSON.parse(event.data);
+    renderDevices(devices);
+  };
+  hotspotEventSource.onerror = () => {
+    hotspotEventSource.close();
+    hotspotEventSource = null;
+  };
+}
+
+function stopDeviceStream() {
+  if (hotspotEventSource) {
+    hotspotEventSource.close();
+    hotspotEventSource = null;
+  }
+}
+
+function renderDevices(devices) {
+  setStep("hs", "hs-devices", devices.length > 0 ? "active" : "");
+  if (devices.length === 0) {
+    devicesTbody.innerHTML = '<tr><td colspan="3" class="empty-state">No connected devices</td></tr>';
+    return;
+  }
+  devicesTbody.innerHTML = devices.map((d) =>
+    "<tr>" +
+      "<td>" + (d.ip || "—") + "</td>" +
+      "<td><code>" + (d.mac || "—") + "</code></td>" +
+      "<td>" + (d.hostname || "—") + "</td>" +
+    "</tr>"
+  ).join("");
+}
+
+document.querySelector('[data-tab="hotspot"]').addEventListener("click", () => {
+  fetchHotspotStatus();
+  fetchInterfaces();
+});
+
+fetchHotspotStatus();

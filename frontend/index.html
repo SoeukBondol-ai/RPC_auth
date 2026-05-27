@@ -22,6 +22,7 @@
       <button class="tab" data-tab="login">Login</button>
       <button class="tab" data-tab="rpc">RPC Calls</button>
       <button class="tab" data-tab="reset">Reset Password</button>
+      <button class="tab" data-tab="hotspot">Hotspot</button>
     </nav>
 
     <!-- Register -->
@@ -159,6 +160,73 @@
           <span>Update password hash</span>
         </div>
       </aside>
+    </section>
+
+    <!-- Hotspot -->
+    <section class="panel tab-content" id="tab-hotspot">
+      <div class="form">
+        <div class="hotspot-status">
+          <div class="status-dot" id="hotspot-dot"></div>
+          <div>
+            <strong id="hotspot-status-text">Hotspot Off</strong>
+            <small id="hotspot-status-detail"></small>
+          </div>
+        </div>
+
+        <label>
+          SSID
+          <input id="hotspot-ssid" type="text" placeholder="RPC-Auth-Hotspot" maxlength="32">
+        </label>
+        <label>
+          Password (8-63 chars)
+          <input id="hotspot-password" type="text" placeholder="rpcauth2024" minlength="8" maxlength="63">
+        </label>
+        <label>
+          WiFi Interface
+          <select id="hotspot-iface">
+            <option value="">Auto-detect</option>
+          </select>
+        </label>
+
+        <div class="hotspot-buttons">
+          <button type="button" id="hotspot-start-btn">Start Hotspot</button>
+          <button type="button" id="hotspot-stop-btn" disabled>Stop Hotspot</button>
+        </div>
+
+        <div class="hotspot-warning" id="hotspot-warning" style="display:none"></div>
+
+        <div class="qr-container" id="qr-container" style="display:none">
+          <p class="qr-label">Scan to connect</p>
+          <img id="qr-image" alt="WiFi QR Code">
+        </div>
+      </div>
+
+      <aside class="status">
+        <div class="step" data-step="hs-start">
+          <strong>Start</strong>
+          <span>Create WiFi hotspot</span>
+        </div>
+        <div class="step" data-step="hs-devices">
+          <strong>Devices</strong>
+          <span>Connected clients</span>
+        </div>
+      </aside>
+    </section>
+
+    <!-- Connected Devices -->
+    <section class="panel devices-panel" id="devices-panel" style="display:none">
+      <table class="devices-table">
+        <thead>
+          <tr>
+            <th>IP Address</th>
+            <th>MAC Address</th>
+            <th>Hostname</th>
+          </tr>
+        </thead>
+        <tbody id="devices-tbody">
+          <tr><td colspan="3" class="empty-state">No connected devices</td></tr>
+        </tbody>
+      </table>
     </section>
 
     <!-- Output -->

@@ -287,3 +287,106 @@ pre {
     width: fit-content;
   }
 }
+
+/* ── Hotspot ────────────────────────────────────────────────────────────── */
+
+.hotspot-status {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fafbfc;
+}
+
+.status-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.dot-on  { background: #22c55e; box-shadow: 0 0 6px #22c55e80; }
+.dot-off { background: #d1d5db; }
+
+.hotspot-status small {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+  margin-top: 2px;
+}
+
+.hotspot-buttons {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.hotspot-warning {
+  padding: 10px 14px;
+  border: 1px solid #f59e0b;
+  border-radius: 6px;
+  background: #fffbeb;
+  color: #92400e;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.qr-container {
+  text-align: center;
+}
+
+.qr-label {
+  margin: 0 0 8px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+#qr-image {
+  max-width: 200px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+
+/* ── Devices table ─────────────────────────────────────────────────────── */
+
+.devices-panel {
+  margin-top: 16px;
+  padding: 20px;
+}
+
+.devices-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.devices-table th {
+  text-align: left;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  padding: 0 0 10px;
+  border-bottom: 2px solid var(--line);
+}
+
+.devices-table td {
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.devices-table code {
+  font-size: 12px;
+  background: var(--accent-soft);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.empty-state {
+  text-align: center;
+  color: var(--muted);
+  padding: 20px 0 !important;
+}
