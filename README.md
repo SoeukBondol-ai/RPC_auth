@@ -63,11 +63,13 @@ rpc_auth_project/
 │   ├── index.html           # Browser UI (Register / Login / Reset / RPC)
 │   ├── app.js               # Frontend logic (fetch calls to Gateway)
 │   └── style.css            # Styles
+├── config.py                # Environment-based configuration
 ├── gateway.py               # Flask REST gateway on port 8000
 ├── run.py                   # Start all 3 services in one terminal
 ├── seed.py                  # Create default test users
 ├── demo.py                  # All-in-one CLI demo (single terminal)
 ├── Makefile                 # make seed / make run / make demo
+├── .env.example             # Template for environment variables
 └── pyproject.toml           # Dependencies + ruff config
 ```
 
@@ -79,22 +81,47 @@ rpc_auth_project/
 | Symmetric Encryption | AES-256-CBC with PKCS7 padding |
 | Asymmetric Encryption | RSA-2048 with OAEP+SHA256 |
 | Token Signing | HMAC-SHA256 (JWT-like format) |
-| Password Hashing | scrypt (via `werkzeug.security`) |
+| Password Hashing | Argon2id (via `argon2-cffi`) |
 | Database | SQLite via SQLAlchemy 2.0 |
 | Web Frontend | Vanilla JS + CSS, served by Flask |
 | REST Gateway | Flask |
 | Linting/Formatting | Ruff |
 
+## Configuration
+
+All configuration is loaded from environment variables (with sensible defaults for development). Copy `.env.example` to `.env` and customize:
+
+```bash
+cp .env.example .env
+```
+
+| Variable | Default | Description |
+|---|---|---|
+| `RPC_AUTH_AES_KEY_HEX` | *(built-in dev key)* | 64-char hex string for AES-256 shared key |
+| `RPC_AUTH_SECRET_KEY` | `rpc_auth_super_secret_2024` | HMAC-SHA256 token signing secret |
+| `RPC_AUTH_DB_PATH` | `users.db` | SQLite database file path |
+| `RPC_AUTH_AUTH_HOST` | `localhost` | Auth service hostname |
+| `RPC_AUTH_AUTH_PORT` | `8001` | Auth service port |
+| `RPC_AUTH_RPC_HOST` | `localhost` | RPC server hostname |
+| `RPC_AUTH_RPC_PORT` | `8002` | RPC server port |
+| `RPC_AUTH_GATEWAY_HOST` | `localhost` | Gateway hostname |
+| `RPC_AUTH_GATEWAY_PORT` | `8000` | Gateway port |
+| `RPC_AUTH_SEED_USERS` | `alice:secret123,bob:pass456,admin:admin789` | Comma-separated `user:password` pairs for seeding |
+
+Generate production-safe secrets:
+
+```bash
+# AES key
+python -c "import os; print(os.urandom(32).hex())"
+
+# JWT secret
+python -c "import secrets; print(secrets.token_urlsafe(32))"
+```
+
 ## Install
 
 ```bash
 uv sync
-```
-
-Or with pip:
-
-```bash
-pip install cryptography flask sqlalchemy
 ```
 
 ## Quick Start
@@ -171,11 +198,19 @@ uv run python client/client.py --user alice --password wrong --method getData --
 | bob | pass456 |
 | admin | admin789 |
 
-These are seeded automatically on first run. New users can be created via the Register endpoint.
+These are seeded automatically on first run. The seed users are configurable via the `RPC_AUTH_SEED_USERS` environment variable. New users can be created via the Register endpoint.
+
+## Password Security
+
+Passwords are hashed using **Argon2id** — the winner of the 2015 Password Hashing Competition and the recommended algorithm for password storage. Argon2 provides:
+
+- **Memory hardness** — resistant to GPU/ASIC attacks
+- **Automatic rehashing** — when hashing parameters are updated, passwords are transparently rehashed on next successful login
+- **No plaintext storage** — only the hash is stored in the database
 
 ## Database
 
-User data is stored in `users.db` (SQLite). Passwords are hashed with scrypt — never stored in plaintext. The database is created automatically on first run.
+User data is stored in `users.db` (SQLite). Passwords are hashed with Argon2id — never stored in plaintext. The database path is configurable via `RPC_AUTH_DB_PATH`. The database is created automatically on first run.
 
 ## Linting
 

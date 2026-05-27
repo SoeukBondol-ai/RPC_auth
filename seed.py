@@ -2,6 +2,7 @@ import sys
 
 sys.path.insert(0, ".")
 
+import config
 from auth_service import db
 
 
@@ -9,8 +10,7 @@ def main():
     db.init_db()
     print("Database initialized.")
 
-    defaults = [("alice", "secret123"), ("bob", "pass456"), ("admin", "admin789")]
-    for username, password in defaults:
+    for username, password in config.get_seed_users():
         if db.user_exists(username):
             print(f"  {username:8s} — already exists")
         else:

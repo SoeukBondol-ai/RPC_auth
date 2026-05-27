@@ -5,6 +5,7 @@ import xmlrpc.client
 
 sys.path.insert(0, "..")
 
+import config
 from common.token_utils import verify_token
 
 
@@ -47,7 +48,7 @@ class RPCServer:
 
 
 if __name__ == "__main__":
-    HOST, PORT = "localhost", 8002
+    HOST, PORT = config.RPC_HOST, config.RPC_PORT
     server = xmlrpc.server.SimpleXMLRPCServer(
         (HOST, PORT), logRequests=False, allow_none=True
     )

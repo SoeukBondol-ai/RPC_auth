@@ -5,14 +5,13 @@ import xmlrpc.client
 
 sys.path.insert(0, "..")
 
-from common.encryption import AESCipher, RSACipher
+import config
 
-AUTH_URL = "http://localhost:8001"
-SERVER_URL = "http://localhost:8002"
+from common.encryption import AESCipher, RSACipher
 
 
 def authenticate_symmetric(username: str, password: str, method: str) -> str:
-    auth = xmlrpc.client.ServerProxy(AUTH_URL)
+    auth = xmlrpc.client.ServerProxy(config.AUTH_URL)
     key_hex = auth.get_shared_key_hex()
     key = AESCipher.key_from_hex(key_hex)
 
@@ -26,7 +25,7 @@ def authenticate_symmetric(username: str, password: str, method: str) -> str:
 
 
 def authenticate_asymmetric(username: str, password: str, method: str) -> str:
-    auth = xmlrpc.client.ServerProxy(AUTH_URL)
+    auth = xmlrpc.client.ServerProxy(config.AUTH_URL)
     pub_pem = auth.get_public_key()
     public_key = RSACipher.load_public_key(pub_pem)
 
@@ -40,7 +39,7 @@ def authenticate_asymmetric(username: str, password: str, method: str) -> str:
 
 
 def call_rpc(method: str, token: str, **kwargs):
-    srv = xmlrpc.client.ServerProxy(SERVER_URL)
+    srv = xmlrpc.client.ServerProxy(config.SERVER_URL)
     rpc = getattr(srv, method)
 
     if method == "getData":
@@ -60,7 +59,7 @@ def call_rpc(method: str, token: str, **kwargs):
 def main():
     parser = argparse.ArgumentParser(description="RPC Client with Auth")
     parser.add_argument("--user", default="alice", help="Username")
-    parser.add_argument("--password", default="secret123", help="Password")
+    parser.add_argument("--password", required=True, help="Password")
     parser.add_argument(
         "--method",
         default="getData",

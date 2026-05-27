@@ -4,8 +4,7 @@ import hashlib
 import base64
 import time
 
-
-SECRET_KEY = "rpc_auth_super_secret_2024"  # In production: load from env / HSM
+import config
 
 
 def _b64url_encode(data: dict | str) -> str:
@@ -20,7 +19,7 @@ def _b64url_decode(s: str) -> dict:
 
 def _sign(header_enc: str, payload_enc: str) -> str:
     msg = f"{header_enc}.{payload_enc}".encode()
-    sig = hmac.new(SECRET_KEY.encode(), msg, hashlib.sha256).digest()
+    sig = hmac.new(config.SECRET_KEY.encode(), msg, hashlib.sha256).digest()
     return base64.urlsafe_b64encode(sig).rstrip(b"=").decode()
 
 
